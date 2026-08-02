@@ -8,6 +8,7 @@ const redis = require('../../shared/database/redis');
 const { generateRandomCode } = require('../../shared/utils/base62');
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 

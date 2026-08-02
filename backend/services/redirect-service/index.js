@@ -6,6 +6,7 @@ const db = require('../../shared/database/db');
 const redis = require('../../shared/database/redis');
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
