@@ -26,7 +26,14 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
       onAuthSuccess(user);
       onClose();
     } catch (err) {
-      setError(err.response?.data?.error || 'Authentication failed. Please check your credentials.');
+      const serverMsg = err.response?.data?.error || err.response?.data?.message;
+      if (serverMsg) {
+        setError(serverMsg);
+      } else if (!err.response) {
+        setError('Network connection error. Please refresh the page and try again.');
+      } else {
+        setError('Authentication failed. Please check your credentials.');
+      }
     } finally {
       setLoading(false);
     }
