@@ -1,0 +1,31 @@
+{
+  "name": "url-shortener-backend",
+  "version": "1.0.0",
+  "description": "Production URL Shortener Microservices",
+  "main": "api-gateway/index.js",
+  "scripts": {
+    "start:gateway": "node api-gateway/index.js",
+    "start:auth": "node services/auth-service/index.js",
+    "start:url": "node services/url-service/index.js",
+    "start:redirect": "node services/redirect-service/index.js",
+    "start:analytics": "node services/analytics-service/index.js",
+    "db:migrate": "node shared/database/migrate.js",
+    "db:seed": "node shared/database/seed.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "pg": "^8.12.0",
+    "ioredis": "^5.4.1",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3",
+    "http-proxy-middleware": "^3.0.0",
+    "express-rate-limit": "^7.3.1",
+    "rate-limit-redis": "^4.2.0",
+    "geoip-lite": "^1.4.10",
+    "ua-parser-js": "^1.0.38",
+    "helmet": "^7.1.0",
+    "uuid": "^10.0.0"
+  }
+}
