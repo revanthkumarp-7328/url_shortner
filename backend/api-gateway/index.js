@@ -10,6 +10,9 @@ const redis = require('../shared/database/redis');
 
 const app = express();
 
+// Enable trust proxy for Cloudflare & Nginx reverse proxies
+app.set('trust proxy', 1);
+
 app.use(helmet());
 app.use(cors());
 
