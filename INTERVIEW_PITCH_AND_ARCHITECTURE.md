@@ -8,7 +8,7 @@
 
 > *"I designed and deployed **ZipUrl**—a production-grade, distributed URL shortener built with an event-driven microservices architecture using Node.js, Express, PostgreSQL, Redis Streams, Nginx, Docker Compose, AWS EC2, and Cloudflare Pages.*
 > 
-> *The system achieves **sub-15ms redirection latency** by serving short code lookups directly from an in-memory Redis cache. Click analytics are logged asynchronously using **Redis Streams** and processed by a background worker into PostgreSQL without blocking the HTTP redirection response. The entire microservice backend is containerized, reverse-proxied with Nginx, and deployed on AWS EC2 behind Cloudflare DNS with Flexible SSL."*
+> *The system achieves **sub-15ms redirection latency** by serving short code lookups directly from an in-memory Redis cache. Click analytics are logged asynchronously using **Redis Streams** and processed by a background worker into PostgreSQL without blocking the HTTP redirection response. The entire microservice backend is containerized, reverse-proxied with Nginx on AWS EC2, and secured end-to-end with **15-year Cloudflare Origin CA SSL certificates** in **Full (Strict)** mode over HTTPS Port 443."*
 
 ---
 

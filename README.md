@@ -151,14 +151,20 @@ docker compose up --build
 
 ---
 
-### Phase 3: Cloudflare DNS Setup
+### Phase 3: Cloudflare DNS & Origin CA SSL Setup (Full Strict HTTPS)
 In Cloudflare DNS Manager for `yourdomain.com`, add the following DNS records:
 
 | Type | Name | Target / IP Value | Proxy Status | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| **CNAME** | `app` | `your-app.pages.dev` | 🟠 Proxied | React Admin Dashboard (`app.yourdomain.com`) |
-| **A** | `api` | `YOUR_AWS_EC2_PUBLIC_IP` | 🟠 Proxied | Express API Gateway (`api.yourdomain.com`) |
-| **A** | `s` | `YOUR_AWS_EC2_PUBLIC_IP` | 🟠 Proxied | High-Speed Redirection Engine (`s.yourdomain.com`) |
+| **CNAME** | `@` / `app` | `your-app.pages.dev` | 🟠 Proxied | React Admin Dashboard (`zipurl.dpdns.org`) |
+| **A** | `api` | `YOUR_AWS_EC2_PUBLIC_IP` | 🟠 Proxied | Express API Gateway (`api.zipurl.dpdns.org`) |
+| **A** | `s` | `YOUR_AWS_EC2_PUBLIC_IP` | 🟠 Proxied | High-Speed Redirection Engine (`s.zipurl.dpdns.org`) |
+
+#### End-to-End SSL/TLS Encryption:
+1. **Generate Origin CA Certificate**: In Cloudflare Dashboard ➔ **SSL/TLS** ➔ **Origin Server** ➔ Create a 15-year wildcard certificate (`*.zipurl.dpdns.org`).
+2. **Save on EC2**: Save `origin-cert.pem` and `origin-key.pem` in `/infrastructure/nginx/certs/` (mounted into Nginx Docker container).
+3. **Set Cloudflare SSL Mode**: Switch Cloudflare SSL encryption mode to **Full (Strict)**.
+4. Nginx listens on **Port 443 HTTPS** with TLS 1.2/1.3 and forces all Port 80 HTTP traffic to redirect (`301 Moved Permanently`) to HTTPS.
 
 ---
 

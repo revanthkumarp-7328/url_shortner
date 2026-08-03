@@ -16,12 +16,16 @@ This log documents all technical challenges, root causes, and engineering resolu
 
 ## 🛠️ Deployment Issues & Engineering Resolutions
 
-### 1. Cloudflare 521 Origin Server Down Error
+### 1. Cloudflare SSL/TLS Encryption & Origin Certificate Setup
 - **Symptom**: Accessing `https://api.zipurl.dpdns.org` or `https://s.zipurl.dpdns.org` returned Cloudflare Error 521 (Origin Server Down).
-- **Root Cause**: Cloudflare SSL mode was set to "Full (Strict)", requiring an SSL certificate installed directly on the origin EC2 Nginx server. However, origin Nginx was configured to listen on Port 80 (HTTP).
+- **Root Cause**: Cloudflare SSL mode was set to "Full (Strict)", requiring a valid SSL certificate installed on origin EC2 Nginx server. However, origin Nginx was initially listening on Port 80 (HTTP).
 - **Resolution**:
-  - Guided user to switch Cloudflare SSL/TLS encryption mode to **Flexible**.
-  - Cloudflare now handles client-side HTTPS termination and proxies traffic to Nginx on Port 80.
+  - **Phase 1 (Initial Setup)**: Temporarily switched Cloudflare to Flexible SSL to establish initial HTTP connectivity.
+  - **Phase 2 (Enterprise Security Production Upgrade)**:
+    1. Generated a 15-year **Cloudflare Origin CA Certificate** (`*.zipurl.dpdns.org`).
+    2. Saved `origin-cert.pem` and `origin-key.pem` in EC2 directory `/infrastructure/nginx/certs/` and mounted into Nginx container.
+    3. Reconfigured Nginx to listen on **Port 443 HTTPS** with TLS 1.2/1.3 and redirect all Port 80 HTTP traffic (`return 301 https://$host$request_uri;`).
+    4. Switched Cloudflare SSL/TLS mode to **Full (Strict)**, enabling end-to-end encrypted and verified origin traffic.
 
 ---
 
