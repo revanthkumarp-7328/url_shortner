@@ -56,8 +56,13 @@ export default function App() {
         )}
       </main>
 
-      <footer style={{ borderTop: '1px solid var(--border-glass)', padding: '24px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-        <p>Production URL Shortener Microservices • Deployed on Cloudflare Pages & AWS EC2</p>
+      <footer style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', padding: '28px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+        <p style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500, marginBottom: '6px' }}>
+          Made with <span className="heart-icon">❤️</span> by <span className="revanth-gradient">Revanth</span>
+        </p>
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
+          Production URL Shortener Microservices • Cloudflare Pages & AWS EC2
+        </p>
       </footer>
 
       <AuthModal

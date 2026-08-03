@@ -1,12 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
-  --bg-dark: #030712;
+  --bg-dark: #070a14;
   --bg-card: rgba(15, 23, 42, 0.75);
   --bg-card-hover: rgba(30, 41, 59, 0.85);
   
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-glow: rgba(99, 102, 241, 0.4);
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --border-glow: rgba(99, 102, 241, 0.45);
   
   --primary: #6366f1;
   --primary-glow: rgba(99, 102, 241, 0.35);
@@ -41,31 +41,31 @@ body {
   position: relative;
 }
 
-/* Ambient Background Lights */
+/* Ambient Cosmic Background Lights */
 body::before {
   content: '';
   position: fixed;
-  top: -200px;
+  top: -220px;
   left: 20%;
-  width: 600px;
-  height: 600px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.18) 0%, rgba(3, 7, 18, 0) 70%);
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.22) 0%, rgba(7, 10, 20, 0) 70%);
   z-index: -1;
   pointer-events: none;
-  filter: blur(60px);
+  filter: blur(70px);
 }
 
 body::after {
   content: '';
   position: fixed;
-  bottom: -200px;
+  bottom: -220px;
   right: 15%;
-  width: 700px;
-  height: 700px;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.15) 0%, rgba(3, 7, 18, 0) 70%);
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.18) 0%, rgba(7, 10, 20, 0) 70%);
   z-index: -1;
   pointer-events: none;
-  filter: blur(80px);
+  filter: blur(90px);
 }
 
 /* Glassmorphism Card System */
@@ -75,13 +75,13 @@ body::after {
   -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-card:hover {
-  border-color: rgba(255, 255, 255, 0.15);
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .glass-card-interactive:hover {
@@ -89,7 +89,7 @@ body::after {
   border-color: var(--border-glow);
 }
 
-/* Typography Gradient */
+/* Typography Gradients */
 .gradient-heading {
   background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 40%, #818cf8 100%);
   -webkit-background-clip: text;
@@ -100,6 +100,28 @@ body::after {
   background: linear-gradient(135deg, #818cf8 0%, #06b6d4 50%, #a855f7 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+.revanth-gradient {
+  background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+/* Heart Beat Animation */
+@keyframes heart-beat {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); filter: drop-shadow(0 0 10px rgba(244, 63, 94, 0.9)); }
+}
+
+.heart-icon {
+  display: inline-block;
+  color: #f43f5e;
+  animation: heart-beat 1.4s infinite ease-in-out;
+  margin: 0 4px;
+  vertical-align: middle;
 }
 
 /* Buttons */
@@ -145,12 +167,12 @@ body::after {
 
 .btn-glass:hover {
   background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 /* Inputs */
 .input-glass-premium {
-  background: rgba(15, 23, 42, 0.7);
+  background: rgba(15, 23, 42, 0.75);
   border: 1px solid var(--border-subtle);
   color: var(--text-primary);
   color-scheme: dark;
