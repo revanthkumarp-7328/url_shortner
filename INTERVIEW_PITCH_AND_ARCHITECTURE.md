@@ -8,7 +8,7 @@
 
 > *"I designed and deployed **ZipUrl**—a production-grade, distributed URL shortener built with an event-driven microservices architecture using Node.js, Express, PostgreSQL, Redis Streams, Nginx, Docker Compose, AWS EC2, and Cloudflare Pages.*
 > 
-> *The system achieves **sub-15ms redirection latency** by serving short code lookups directly from an in-memory Redis cache. Click analytics are logged asynchronously using **Redis Streams** and processed by a background worker into PostgreSQL without blocking the HTTP redirection response. The entire microservice backend is containerized, reverse-proxied with Nginx on AWS EC2, and secured end-to-end with **15-year Cloudflare Origin CA SSL certificates** in **Full (Strict)** mode over HTTPS Port 443."*
+> *The system achieves **sub-15ms redirection latency** by serving short code lookups directly from an in-memory Redis cache. Click analytics are logged asynchronously using **Redis Streams** and processed by a background worker into PostgreSQL without blocking the HTTP redirection response. The backend is containerized on AWS EC2 behind an Nginx reverse proxy, secured with **AWS Security Group Inbound CIDR Whitelisting** (allowing strictly Cloudflare IP ranges), and encrypted end-to-end with **15-year Cloudflare Origin CA SSL certificates** in **Full (Strict)** mode over HTTPS Port 443."*
 
 ---
 
@@ -177,6 +177,14 @@ ZipUrl implements TTL at 3 distinct architectural layers:
 > 2. **Redis Cluster**: Deploy a Redis Cluster with LRU eviction policy to cache the top 20% most active short links.
 > 3. **Multiple Worker Processes**: Scale `analytics-service` consumer instances using Redis Stream Consumer Groups to parallelize click ingestion.
 > 4. **AWS Auto-Scaling**: Deploy Nginx and Redirect Engine instances across multiple Availability Zones behind an AWS Application Load Balancer.
+
+---
+
+### Q11: How did you secure origin access and SSL/TLS certificates on AWS EC2?
+> **Answer**: *"I implemented a multi-layered Origin Shield and SSL/TLS security architecture:*
+> 1. **AWS Security Group Inbound CIDR Whitelisting**: Restricted AWS EC2 Inbound Rules to whitelist **strictly official Cloudflare IPv4 CIDR ranges** (`173.245.48.0/20`, `104.16.0.0/13`, `172.64.0.0/13`, etc.) for Port 443 HTTPS. This ensures no attacker can bypass Cloudflare DDoS protection or WAF by scanning or accessing the EC2 IP directly.
+> 2. **Cloudflare Origin CA Certificates**: Installed 15-year Cloudflare Origin CA certificates (`origin-cert.pem` & `origin-key.pem`) in Nginx and enabled **Cloudflare Full (Strict) SSL Mode**, establishing end-to-end encrypted TLS 1.2/1.3 handshakes between Cloudflare Edge and EC2.
+> 3. **Forced HTTPS Redirection**: Nginx immediately redirects any unencrypted Port 80 HTTP request (`return 301 https://$host$request_uri;`) to Port 443."*
 
 ---
 
