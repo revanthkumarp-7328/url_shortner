@@ -13,17 +13,9 @@ export default function Navbar({ user, onOpenAuth, onLogout }) {
             <Zap size={22} color="#ffffff" />
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h1 style={{ fontSize: '1.4rem', fontWeight: 800, letterSpacing: '-0.5px' }} className="gradient-heading">
-                TrimLink
-              </h1>
-              <span style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)', padding: '2px 8px', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 700 }}>
-                v2.0 PRO
-              </span>
-            </div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', letterSpacing: '0.5px', fontWeight: 500 }}>
-              ENTERPRISE MICROSERVICES
-            </span>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.5px' }} className="revanth-gradient">
+              ZipUrl
+            </h1>
           </div>
         </div>
 
