@@ -73,8 +73,10 @@ async function startAnalyticsWorker() {
             }
 
             // Parse Geo IP
-            const isLocal = !event.ip || event.ip === '127.0.0.1' || event.ip === '::1' || event.ip.startsWith('192.168.') || event.ip.startsWith('10.');
-            const geo = geoip.lookup(event.ip) || {};
+            const rawIp = event.ip || '127.0.0.1';
+            const cleanIp = rawIp.split(',')[0].trim();
+            const isLocal = !cleanIp || cleanIp === '127.0.0.1' || cleanIp === '::1' || cleanIp.startsWith('192.168.') || cleanIp.startsWith('10.');
+            const geo = geoip.lookup(cleanIp) || {};
             const country = isLocal ? 'Local Dev' : (geo.country || 'Unknown');
             const city = isLocal ? 'Localhost' : (geo.city || 'Unknown');
 
@@ -89,7 +91,7 @@ async function startAnalyticsWorker() {
             await db.query(
               `INSERT INTO clicks (url_id, ip_address, country, city, browser, os, device, referrer)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-              [event.urlId, event.ip, country, city, browser, os, device, event.referrer]
+              [event.urlId, cleanIp, country, city, browser, os, device, event.referrer]
             );
 
             // Acknowledge processed event
