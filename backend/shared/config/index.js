@@ -27,7 +27,7 @@ module.exports = {
     port: process.env.REDIS_PORT || 6379,
     password: process.env.REDIS_PASSWORD || null,
   },
-  JWT_SECRET: process.env.JWT_SECRET || 'super_secret_production_jwt_key_url_shortener_2026',
+  JWT_SECRET: process.env.JWT_SECRET || 'ProductionJwtSecretKeyZipUrl2026!',
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
   BASE_REDIRECT_URL: process.env.BASE_REDIRECT_URL || 'http://localhost:5003',
   CLICK_STREAM_KEY: 'stream:click_events',
