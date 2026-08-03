@@ -96,6 +96,21 @@
 6. Sends `XACK` to Redis Stream to confirm event processing.
 7. React frontend polls `GET /api/v1/analytics/dashboard-summary` every 3 seconds for live chart updates.
 
+### D. ⏱️ TTL (Time-To-Live) Strategy Across Architecture
+ZipUrl implements TTL at 3 distinct architectural layers:
+
+1. **Redis Cache TTL (`EX 86400`)**:
+   - Short code lookup records (`short:<code >`) in Redis expire automatically after **24 hours (86,400 seconds)**.
+   - Prevents RAM bloat and ensures inactive links are automatically evicted from Redis memory. If a link is clicked after 24h, the Redirect Engine fetches from PostgreSQL and re-warms the cache.
+
+2. **Custom Link Expiration TTL (`expires_at`)**:
+   - When users create links with custom expiration dates, `Redirect Engine` evaluates `expiresAt`.
+   - If `Date.now() >= expiresAt`, the system responds with **HTTP 410 Gone** and renders a glassmorphism `⏳ Short Link Expired` page.
+
+3. **Nginx Container DNS Resolution TTL (`valid=10s`)**:
+   - In `infrastructure/nginx/nginx.conf`, Docker container IP resolution has a **10-second TTL** (`resolver 127.0.0.11 valid=10s;`).
+   - Ensures Nginx dynamically updates microservice IP addresses during container restarts without causing 502 Bad Gateway errors.
+
 ---
 
 ## 💡 5. Top 10 Technical Interview Questions & Answers
