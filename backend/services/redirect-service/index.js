@@ -19,7 +19,7 @@ app.get('/health', (req, res) => {
 // Helper to push async click event to Redis Stream
 async function logClickAsync(req, urlId) {
   try {
-    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const rawIp = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
     const ip = rawIp.split(',')[0].trim();
     const userAgent = req.headers['user-agent'] || 'Unknown';
     const referrer = req.headers['referer'] || req.headers['referrer'] || 'Direct';
