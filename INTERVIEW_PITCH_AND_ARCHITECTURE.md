@@ -18,20 +18,24 @@
                               ┌────────────────────────┐
                               │  Client / Browser      │
                               └───────────┬────────────┘
-                                          │
+                                          │ (HTTPS TLS 1.3)
                                           ▼
                               ┌────────────────────────┐
                               │    Cloudflare Edge     │
-                              │  (DNS, SSL, DDoS, CDN) │
+                              │ (Full Strict SSL Mode) │
                               └───────────┬────────────┘
                                           │
                    ┌──────────────────────┴──────────────────────┐
-                   │ (HTTPS Proxy)                               │ (Static Frontend Hosting)
+                   │ (Port 443 HTTPS Proxy)                      │ (Static Hosting)
+                   │ [Cloudflare CIDR Inbound Rule Whitelisted]   │
                    ▼                                             ▼
      ┌────────────────────────┐                    ┌────────────────────────┐
      │ AWS EC2 (Elastic IP)   │                    │   Cloudflare Pages     │
      │ Nginx Reverse Proxy    │                    │   React 19 + Vite UI   │
-     └─────────────┬──────────┘                    └────────────────────────┘
+     │ • Port 443 (HTTPS TLS) │                    └────────────────────────┘
+     │ • Port 80 (HTTP 301)   │
+     │ • Docker DNS 10s TTL   │
+     └─────────────┬──────────┘
                    │
     ┌──────────────┴───────────────────────────┐
     │                                          │
