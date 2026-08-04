@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Link2, Settings, Copy, Check, QrCode, Lock, Calendar, Sparkles, Shield, Cpu, Activity } from 'lucide-react';
+import { Link2, Settings, Copy, Check, QrCode, Lock, Calendar, Sparkles, Shield, Cpu, Zap } from 'lucide-react';
 import { urlAPI } from '../services/api';
 
-export default function UrlShortenerWidget({ user, onUrlCreated, onOpenAuth }) {
+export default function UrlShortenerWidget({ onUrlCreated }) {
   const [originalUrl, setOriginalUrl] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [customAlias, setCustomAlias] = useState('');
@@ -19,11 +19,6 @@ export default function UrlShortenerWidget({ user, onUrlCreated, onOpenAuth }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!user) {
-      onOpenAuth();
-      return;
-    }
-
     setError('');
     setLoading(true);
 
@@ -58,16 +53,16 @@ export default function UrlShortenerWidget({ user, onUrlCreated, onOpenAuth }) {
 
   return (
     <div style={{ maxWidth: '860px', margin: '24px auto 0', width: '100%' }}>
-      {/* Feature Pills */}
+      {/* Feature Badges */}
       <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
         <div style={{ background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.25)', color: '#818cf8', padding: '4px 10px', borderRadius: '30px', fontSize: '0.72rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
           <Cpu size={12} /> Sub-15ms Redis Engine
         </div>
         <div style={{ background: 'rgba(6, 182, 212, 0.1)', border: '1px solid rgba(6, 182, 212, 0.25)', color: '#06b6d4', padding: '4px 10px', borderRadius: '30px', fontSize: '0.72rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <Activity size={12} /> Geo Analytics
+          <Zap size={12} /> 2 Standalone Microservices
         </div>
         <div style={{ background: 'rgba(236, 72, 153, 0.1)', border: '1px solid rgba(236, 72, 153, 0.25)', color: '#ec4899', padding: '4px 10px', borderRadius: '30px', fontSize: '0.72rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <Shield size={12} /> Password Lock
+          <Shield size={12} /> Sentinel Negative Caching
         </div>
       </div>
 
@@ -78,7 +73,7 @@ export default function UrlShortenerWidget({ user, onUrlCreated, onOpenAuth }) {
             Shorten URLs with <span className="gradient-accent">Lightning Speed</span>
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem', maxWidth: '600px', margin: '0 auto' }}>
-            Enterprise microservices shortener. High throughput, branded aliases, and real-time click tracking.
+            Production microservices shortener. High throughput, branded aliases, and instant Redis redirection.
           </p>
         </div>
 

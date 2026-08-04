@@ -1,129 +1,40 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: shortener_postgres
-    restart: always
-    env_file:
-      - ./backend/.env
-    ports:
-      - "5433:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-shortener_user} -d ${POSTGRES_DB:-shortener_db}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    container_name: shortener_redis
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  migration:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: shortener_migration
-    command: npm run db:migrate
-    env_file:
-      - ./backend/.env
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  auth-service:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: shortener_auth
-    command: npm run start:auth
-    env_file:
-      - ./backend/.env
-    ports:
-      - "5001:5001"
-    depends_on:
-      migration:
-        condition: service_completed_successfully
-
   url-service:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: shortener_url
+    container_name: shortener_url_dev
+    restart: always
     command: npm run start:url
     env_file:
       - ./backend/.env
-    ports:
-      - "5002:5002"
-    depends_on:
-      migration:
-        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   redirect-service:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: shortener_redirect
+    container_name: shortener_redirect_dev
+    restart: always
     command: npm run start:redirect
     env_file:
       - ./backend/.env
-    ports:
-      - "5003:5003"
-    depends_on:
-      migration:
-        condition: service_completed_successfully
-
-  analytics-service:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: shortener_analytics
-    command: npm run start:analytics
-    env_file:
-      - ./backend/.env
-    ports:
-      - "5004:5004"
-    depends_on:
-      migration:
-        condition: service_completed_successfully
-
-  api-gateway:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: shortener_gateway
-    command: npm run start:gateway
-    env_file:
-      - ./backend/.env
-    ports:
-      - "5000:5000"
-    depends_on:
-      - auth-service
-      - url-service
-      - analytics-service
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   nginx:
     image: nginx:alpine
-    container_name: shortener_nginx
+    container_name: shortener_nginx_dev
     restart: always
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infrastructure/nginx/certs:/etc/nginx/certs:ro
     depends_on:
-      - api-gateway
+      - url-service
       - redirect-service
-
-volumes:
-  postgres_data:
-  redis_data:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

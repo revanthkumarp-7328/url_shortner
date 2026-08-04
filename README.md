@@ -1,20 +1,20 @@
-# 🚀 Production Microservices URL Shortener
+# 🚀 ZipUrl — High-Throughput Microservices URL Shortener
 
-An enterprise-grade, high-performance URL shortener application built with **React**, **Node.js/Express Microservices**, **PostgreSQL**, **Redis**, and **Nginx**.
+An enterprise-grade, high-performance URL shortener built with **React**, **Node.js/Express 2-Microservice Architecture**, **Host-Native PostgreSQL 16**, **Redis 7**, **Nginx**, **AWS EC2**, and **Cloudflare Pages**.
 
-Designed for ultra-low latency redirection (`< 15ms`), cost-optimized deployment on **Cloudflare Pages** (Frontend - $0/mo) and **AWS EC2 + EBS Volume** (Backend - ~$0–$5/mo).
+Designed for ultra-low latency redirection (`< 15ms`), cost-optimized deployment on **Cloudflare Pages** (Frontend - $0/mo) and **AWS EC2** (Backend).
 
 ---
 
-## 🏗️ Microservices Architecture Overview
+## 🏗️ 2-Microservice Architecture Overview
 
 ```
                       [ Client Browser ]
                               │
                ┌──────────────┴──────────────┐
                │                             │
-    [ Cloudflare Pages ]           [ Cloudflare DNS / WAF ]
-  (React Admin Dashboard)             (api.yourdomain.com / s.yourdomain.com)
+    [ Cloudflare Pages ]           [ Cloudflare Edge ]
+      (React App CDN)             (Full Strict SSL TLS 1.3)
                │                             │
                └──────────────┬──────────────┘
                               ▼
@@ -22,166 +22,86 @@ Designed for ultra-low latency redirection (`< 15ms`), cost-optimized deployment
                               │
                ┌──────────────┴──────────────┐
                ▼                             ▼
-       [ API Gateway Service ]    [ High-Speed Redirect Engine ]
+   [ url-service:5002 ]            [ redirect-service:5003 ]
+   (Shortening Engine)             (Redirection Engine)
                │                             │
-   ┌───────────┼───────────┐                 │ (Redis L1 Cache O(1))
-   ▼           ▼           ▼                 │
-[Auth Svc] [URL Svc] [Analytics Svc] <── [Redis Streams]
-   │           │           │                 │
-   └───────────┴─────┬─────┘                 │
-                     ▼                       ▼
-            [ PostgreSQL (Docker/EC2) ]     [ Redis (Docker/EC2) ]
-                     │                       │
-                     └───────────┬───────────┘
-                                 ▼
-                     [ AWS EBS Persistent Volume ]
+               └──────────────┬──────────────┘
+                              │ (host.docker.internal)
+                              ▼
+                  [ AWS EC2 Host System ]
+                  • PostgreSQL 16 DB (Partial Indexes & BIGSERIAL)
+                  • Redis 7 Cache (Sentinel Negative Cache 5-min TTL)
 ```
 
 ---
 
 ## 📁 Repository Directory Structure
 
-```
+```text
 url_shortner/
 ├── frontend/                     # React + Vite Glassmorphism Application
 │   ├── src/
-│   │   ├── components/           # Navbar, AuthModal, UrlShortenerWidget, DashboardAnalytics, UrlsTable
+│   │   ├── components/           # Navbar, UrlShortenerWidget, UrlsTable
 │   │   ├── services/             # Axios API Client
 │   │   ├── App.jsx
-│   │   └── index.css             # Glassmorphism design system
-│   ├── wrangler.toml             # Cloudflare Pages config
+│   │   └── index.css             # Mobile-first Glassmorphism design system
 │   └── package.json
 │
 ├── backend/                      # Node.js Microservices
-│   ├── api-gateway/              # Express API Gateway, Rate Limiting & JWT Auth
 │   ├── services/
-│   │   ├── auth-service/         # User auth, JWT & API Key management
-│   │   ├── url-service/          # Base62 URL shortener & CRUD operations
-│   │   ├── redirect-service/     # Sub-15ms Redirection & Async Click Queuing
-│   │   └── analytics-service/    # Redis Stream Worker & GeoIP/UA Analytics API
+│   │   ├── url-service/          # Shortening Engine & Base62 Generator
+│   │   └── redirect-service/     # High-Speed 302 Redirection & Sentinel Cache
 │   ├── shared/
-│   │   ├── database/
-│   │   │   ├── migrations/       # Version-controlled SQL database schema
-│   │   │   ├── migrate.js        # Automated migration runner
-│   │   │   ├── db.js             # PostgreSQL Pool Connection
-│   │   │   └── redis.js          # Redis Client Helper
-│   │   └── utils/
-│   │       └── base62.js         # Base62 encoder
-│   ├── Dockerfile
+│   │   ├── database/             # PostgreSQL & Redis Connectors & Migrations
+│   │   └── utils/                # Base62 Encoding Engine
 │   └── package.json
 │
 ├── infrastructure/
-│   └── nginx/
-│       └── nginx.conf            # Nginx Reverse Proxy Ingress config
+│   └── nginx/                    # Nginx SSL & Microservice Reverse Proxy
 │
-├── docker-compose.yml            # Local development orchestration
-├── docker-compose.prod.yml       # Production AWS EC2 deployment orchestration
-└── README.md
+├── docker-compose.prod.yml       # Production Compose (url-service, redirect-service, nginx)
+└── docker-compose.yml            # Development Compose
 ```
 
 ---
 
-## ⚡ Quick Start: Local Development
+## ⚡ Core Engineering Highlights
 
-### 1. Prerequisites
-- [Docker & Docker Compose](https://www.docker.com/) installed on your machine.
-- Node.js 20+
-
-### 2. Run Entire Stack with Docker Compose
-```bash
-# Clone repository
-git clone <your-repo-url>
-cd url_shortner
-
-# Spin up Postgres, Redis, Migration runner, API Gateway, 4 Microservices & Nginx
-docker compose up --build
-```
-
-### 3. Access Local Services
-- **React Frontend**: `http://localhost:5173` (Run `cd frontend && npm install && npm run dev`)
-- **API Gateway**: `http://localhost:5000`
-- **Short Redirect Engine**: `http://localhost:5003/:code`
-- **Nginx Ingress**: `http://localhost:80`
+- **2 Decoupled Microservices**: `url-service` (shortening engine) and `redirect-service` (redirection engine) operate independently for maximum throughput.
+- **Host-Native Postgres & Redis**: Microservices run in Docker containers connected directly to host-native PostgreSQL 16 and Redis 7 on EC2 (`host.docker.internal`).
+- **Sentinel Negative Caching**: Invalid code lookups are cached in Redis with a 5-minute TTL (`short:invalid:<code>`) to absorb bot probes without touching PostgreSQL.
+- **Collision-Free Storage**: Utilizes `BIGSERIAL` primary keys and partial unique indexes (`CREATE UNIQUE INDEX idx_urls_custom_alias ON urls(custom_alias) WHERE custom_alias IS NOT NULL;`).
+- **Enterprise SSL & Origin Lockdown**: Nginx uses **15-year Cloudflare Origin CA certificates** in **Full (Strict) SSL Mode** over HTTPS Port 443, locked strictly to Cloudflare IPv4 CIDR ranges.
 
 ---
 
-## ☁️ Step-by-Step AWS & Cloudflare Production Deployment
+## 🛠️ Quick Local Setup
 
-### Phase 1: Deploy Frontend on Cloudflare Pages ($0/mo)
-1. Push this repository to GitHub/GitLab.
-2. Go to **Cloudflare Dashboard ➔ Workers & Pages ➔ Create Page**.
-3. Connect your Git Repository:
-   - Framework Preset: `Vite`
-   - Build Command: `npm run build`
-   - Build Output Directory: `dist`
-   - Root Directory: `frontend`
-4. Add Environment Variable:
-   - `VITE_API_BASE_URL` = `https://api.yourdomain.com/api/v1`
-
----
-
-### Phase 2: Deploy Backend Microservices on AWS EC2 (~$0–$5/mo)
-1. **Launch EC2 Instance**:
-   - Instance Type: `t4g.small` or `t3.micro` (AWS Free Tier eligible).
-   - OS: Ubuntu 24.04 LTS.
-   - Security Group Rules: Allow Port `22` (SSH), Port `80` (HTTP), Port `443` (HTTPS).
-2. **Attach EBS Persistent Volume**:
-   - Create a 10GB–20GB EBS `gp3` volume in AWS Console.
-   - Attach it to your EC2 instance and format/mount to `/mnt/postgres_data`:
-     ```bash
-     sudo mkfs -t ext4 /dev/xvdf
-     sudo mkdir -p /mnt/postgres_data
-     sudo mount /dev/xvdf /mnt/postgres_data
-     ```
-3. **Install Docker & Clone Code on EC2**:
+1. **Clone Repository**:
    ```bash
-   sudo apt update && sudo apt install -y docker.io docker-compose-v2 git
-   git clone <your-repo-url>
+   git clone https://github.com/revanthkumarp-7328/url_shortner.git
    cd url_shortner
    ```
-4. **Launch Production Containers**:
+
+2. **Install Dependencies**:
    ```bash
-   # Set production secrets
-   export JWT_SECRET="your_production_jwt_secret_key"
-   export DOMAIN_NAME="yourdomain.com"
-   
-   # Start production microservices
-   docker compose -f docker-compose.prod.yml up -d --build
+   cd backend && npm install
+   cd ../frontend && npm install
+   ```
+
+3. **Database Migration**:
+   ```bash
+   cd backend && npm run db:migrate
+   ```
+
+4. **Start Microservices**:
+   ```bash
+   # Terminal 1: URL Shortening Engine (Port 5002)
+   npm run start:url
+
+   # Terminal 2: Redirection Engine (Port 5003)
+   npm run start:redirect
    ```
 
 ---
-
-### Phase 3: Cloudflare DNS & Origin CA SSL Setup (Full Strict HTTPS)
-In Cloudflare DNS Manager for `yourdomain.com`, add the following DNS records:
-
-| Type | Name | Target / IP Value | Proxy Status | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| **CNAME** | `@` / `app` | `your-app.pages.dev` | 🟠 Proxied | React Admin Dashboard (`zipurl.dpdns.org`) |
-| **A** | `api` | `YOUR_AWS_EC2_PUBLIC_IP` | 🟠 Proxied | Express API Gateway (`api.zipurl.dpdns.org`) |
-| **A** | `s` | `YOUR_AWS_EC2_PUBLIC_IP` | 🟠 Proxied | High-Speed Redirection Engine (`s.zipurl.dpdns.org`) |
-
-#### End-to-End SSL/TLS Encryption:
-1. **Generate Origin CA Certificate**: In Cloudflare Dashboard ➔ **SSL/TLS** ➔ **Origin Server** ➔ Create a 15-year wildcard certificate (`*.zipurl.dpdns.org`).
-2. **Save on EC2**: Save `origin-cert.pem` and `origin-key.pem` in `/infrastructure/nginx/certs/` (mounted into Nginx Docker container).
-3. **Set Cloudflare SSL Mode**: Switch Cloudflare SSL encryption mode to **Full (Strict)**.
-4. Nginx listens on **Port 443 HTTPS** with TLS 1.2/1.3 and forces all Port 80 HTTP traffic to redirect (`301 Moved Permanently`) to HTTPS.
-
----
-
-## 🧪 Database Migrations
-Migrations run automatically on container startup via `npm run db:migrate`.
-
-To create a new database migration:
-1. Add a new timestamped `.sql` file inside `backend/shared/database/migrations/` (e.g. `002_add_tags_table.sql`).
-2. Run `npm run db:migrate` locally or deploy updates to EC2.
-
----
-
-## 🔒 Features Included
-- **Base62 URL Shortener**: Collision-safe encoding algorithm.
-- **Custom Slugs**: Custom branded aliases (e.g. `s.yourdomain.com/my-brand`).
-- **Password Protection**: Optional bcrypt-hashed password protection for short links.
-- **Expiration Dates**: Auto-expiring links.
-- **QR Code Generator**: Downloadable QR codes for every short link.
-- **Real-Time Analytics**: Time-series click counts, GeoIP location tracking, device/browser distribution, and referrer tracking.
-- **JWT & API Keys**: Token authentication and developer API key generation.
+*Created for Revanth • ZipUrl Microservices Architecture*

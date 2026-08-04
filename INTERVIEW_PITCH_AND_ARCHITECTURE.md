@@ -6,56 +6,53 @@
 
 ## 🎯 1. The 30-Second Elevator Pitch
 
-> *"I designed and deployed **ZipUrl**—a production-grade, distributed URL shortener built with an event-driven microservices architecture using Node.js, Express, PostgreSQL, Redis Streams, Nginx, Docker Compose, AWS EC2, and Cloudflare Pages.*
+> *"I designed and deployed **ZipUrl**—a production-grade, low-latency URL shortener composed of **two independent microservices** (`url-service` for link generation and `redirect-service` for fast redirection) containerized on AWS EC2 behind an Nginx reverse proxy.
 > 
-> *The system achieves **sub-15ms redirection latency** by serving short code lookups directly from an in-memory Redis cache. Click analytics are logged asynchronously using **Redis Streams** and processed by a background worker into PostgreSQL without blocking the HTTP redirection response. The backend is containerized on AWS EC2 behind an Nginx reverse proxy, secured with **AWS Security Group Inbound CIDR Whitelisting** (allowing strictly Cloudflare IP ranges), and encrypted end-to-end with **15-year Cloudflare Origin CA SSL certificates** in **Full (Strict)** mode over HTTPS Port 443."*
+> The system achieves **sub-15ms redirection latency** by serving short code lookups directly from an in-memory Redis cache-aside layer. To absorb malicious bot probing without hitting PostgreSQL on repeated invalid lookups, I implemented **sentinel-value negative caching (5-minute TTL)** on the redirection path. Storage is backed by **host-native PostgreSQL** with `BIGSERIAL` primary keys, partial indexes, and unique constraints serving as the sole collision arbiter—requiring no distributed locks. The origin EC2 server is secured with **15-year Cloudflare Origin CA certificates** in **Full (Strict)** mode over HTTPS Port 443, locked strictly to Cloudflare IPv4 CIDR ranges."*
 
 ---
 
 ## 🏗️ 2. System Architecture Diagram
 
 ```
-                              ┌────────────────────────┐
-                              │  Client / Browser      │
-                              └───────────┬────────────┘
-                                          │ (HTTPS TLS 1.3)
-                                          ▼
-                              ┌────────────────────────┐
-                              │    Cloudflare Edge     │
-                              │ (Full Strict SSL Mode) │
-                              └───────────┬────────────┘
-                                          │
-                   ┌──────────────────────┴──────────────────────┐
-                   │ (Port 443 HTTPS Proxy)                      │ (Static Hosting)
-                   │ [Cloudflare CIDR Inbound Rule Whitelisted]   │
-                   ▼                                             ▼
-     ┌────────────────────────┐                    ┌────────────────────────┐
-     │ AWS EC2 (Elastic IP)   │                    │   Cloudflare Pages     │
-     │ Nginx Reverse Proxy    │                    │   React 19 + Vite UI   │
-     │ • Port 443 (HTTPS TLS) │                    └────────────────────────┘
-     │ • Port 80 (HTTP 301)   │
-     │ • Docker DNS 10s TTL   │
-     └─────────────┬──────────┘
-                   │
-    ┌──────────────┴───────────────────────────┐
-    │                                          │
-    ▼ (api.zipurl.dpdns.org)                   ▼ (s.zipurl.dpdns.org)
-┌───────────────────────┐                  ┌────────────────────────┐
-│   API Gateway (5000)  │                  │ Redirect Engine (5003) │
-└───────────┬───────────┘                  └───────────┬────────────┘
-            │                                          │
-  ┌─────────┼───────────┐                   ┌──────────┴──────────┐
-  ▼         ▼           ▼                   ▼                     ▼
-┌───────┐ ┌───────┐ ┌───────────┐     ┌───────────┐         ┌───────────┐
-│ Auth  │ │ URL   │ │ Analytics │     │ Redis     │         │ Redis     │
-│ (5001)│ │ (5002)│ │ (5004)    │     │ Cache     │         │ Streams   │
-└───┬───┘ └───┬───┘ └─────┬─────┘     └─────┬─────┘         └─────┬─────┘
-    │         │           │                 │                     │
-    └─────────┴─────┬─────┴─────────────────┘                     │
+                               ┌────────────────────────┐
+                               │  Client / Browser      │
+                               └───────────┬────────────┘
+                                           │ (HTTPS TLS 1.3)
+                                           ▼
+                               ┌────────────────────────┐
+                               │    Cloudflare Edge     │
+                               │ (Full Strict SSL Mode) │
+                               └───────────┬────────────┘
+                                           │
+                    ┌──────────────────────┴──────────────────────┐
+                    │ (Port 443 HTTPS Proxy)                      │ (Static Hosting)
+                    │ [Cloudflare CIDR Inbound Rule Whitelisted]  │
                     ▼                                             ▼
-          ┌───────────────────┐                         ┌───────────────────┐
-          │  PostgreSQL 16 DB │                         │ Analytics Worker  │
-          └───────────────────┘                         └───────────────────┘
+      ┌────────────────────────┐                    ┌────────────────────────┐
+      │ AWS EC2 (Elastic IP)   │                    │   Cloudflare Pages     │
+      │ Nginx Reverse Proxy    │                    │   React 19 + Vite UI   │
+      │ • Port 443 (HTTPS TLS) │                    └────────────────────────┘
+      │ • Port 80 (HTTP 301)   │
+      │ • Docker DNS 10s TTL   │
+      └─────────────┬──────────┘
+                    │
+     ┌──────────────┴───────────────────────────┐
+     │                                          │
+     ▼ (api.zipurl.dpdns.org)                   ▼ (s.zipurl.dpdns.org)
+ ┌───────────────────────┐                  ┌────────────────────────┐
+ │  url-service (5002)   │                  │ redirect-service (5003)│
+ │  (Shortening Engine)  │                  │  (Redirection Engine)  │
+ └───────────┬───────────┘                  └───────────┬────────────┘
+             │                                          │
+             └───────────────────┬──────────────────────┘
+                                 │ (host.docker.internal)
+                                 ▼
+                     ┌───────────────────────┐
+                     │ AWS EC2 Host System   │
+                     │ • PostgreSQL 16 DB    │
+                     │ • Redis 7 Cache       │
+                     └───────────────────────┘
 ```
 
 ---
@@ -64,144 +61,42 @@
 
 | Microservice | Port | Primary Responsibility | Key Technologies |
 | :--- | :--- | :--- | :--- |
-| **API Gateway** | `5000` | Single entrypoint for REST APIs, CORS control, rate-limiting, and request proxying. | Express, `http-proxy-middleware`, `express-rate-limit` |
-| **Auth Service** | `5001` | User registration, authentication, BCrypt password hashing, JWT issuance, and API Key (`sk_live_*`) management. | Express, JWT, BCrypt, PostgreSQL |
-| **URL Service** | `5002` | Short URL creation, Base62 code generation, custom aliases, password protection, expiration, and Redis cache warming. | Express, Base62, Redis, PostgreSQL |
-| **Redirect Engine** | `5003` | Sub-15ms HTTP 302 redirections, password verification, expiration checks, and asynchronous Redis Stream click queuing. | Express, Redis, PostgreSQL |
-| **Analytics Service** | `5004` | Asynchronous Redis Stream consumer worker, MaxMind GeoIP parsing, User-Agent device/browser parsing, and real-time dashboard APIs. | Express, Redis Streams, `geoip-lite`, `ua-parser-js` |
+| **URL Service** | `5002` | Short URL creation, Base62 code generation, custom alias partial index validation, password protection, and Redis cache pre-warming. | Express, Base62, Redis, PostgreSQL |
+| **Redirect Engine** | `5003` | Sub-15ms HTTP 302 redirections, Redis cache-aside lookups, sentinel negative caching (5-min TTL), password verification, and expiration checks. | Express, Redis, PostgreSQL |
 
 ---
 
-## 🔄 4. End-to-End Workflows (How It Works Under the Hood)
+## 🔬 4. Core System Design Principles & Engineering Decisions
 
-### A. Short URL Creation Workflow
-1. User submits a long URL (`https://example.com/long-page`) via React UI.
-2. Request hits `API Gateway` (`POST /api/v1/urls`) ➔ Proxied to `URL Service`.
-3. `URL Service` inserts record into PostgreSQL `urls` table to obtain auto-incrementing ID.
-4. Converts Database ID to a unique 6-character **Base62 short code** (e.g. ID `12345678` ➔ `WHq3sK`).
-5. **Pre-warms Redis Cache**: Sets `short:WHq3sK` ➔ JSON payload in Redis.
-6. Returns `https://s.zipurl.dpdns.org/WHq3sK` to user.
+### 1. Collision-Free Generation & Partial Indexes
+- **Mechanism**: PostgreSQL `BIGSERIAL` primary keys produce 64-bit sequence IDs mapped into Base62 strings.
+- **Partial Index Arbiter**: For custom aliases, PostgreSQL enforces uniqueness via a partial index (`CREATE UNIQUE INDEX idx_urls_custom_alias ON urls(custom_alias) WHERE custom_alias IS NOT NULL;`).
+- **No Distributed Locks**: Relies on PostgreSQL unique constraints as the ultimate arbiter, avoiding expensive distributed lock mechanisms (e.g. Redlock or ZooKeeper).
 
-### B. High-Speed Redirection Workflow (Sub-15ms)
-1. Visitor clicks `https://s.zipurl.dpdns.org/WHq3sK`.
-2. Cloudflare forwards request with `CF-Connecting-IP` header to EC2 Nginx ➔ Proxied to `Redirect Engine`.
-3. `Redirect Engine` queries Redis (`GET short:WHq3sK`).
-   - **Cache Hit**: Instantly retrieves original URL in **<2ms**.
-   - **Cache Miss**: Queries PostgreSQL ➔ Sets Redis cache with 24-hour expiration (`EX 86400`).
-4. **Fire-and-Forget Analytics Queuing**: Pushes click metadata (IP, User-Agent, Referrer, Timestamp) to Redis Stream (`stream:click_events`) asynchronously (`XADD`).
-5. Returns **HTTP 302 Redirect** immediately to visitor without waiting for database writes.
+### 2. High-Throughput Redirection & Sentinel Negative Caching
+- **Fast Path Cache-Aside**: Redirection lookups check Redis (`short:<code>`) first, completing in **< 2ms**.
+- **Sentinel Negative Cache (5-min TTL)**: When a non-existent short code is requested, Redis sets a sentinel key (`short:invalid:<code>` with a 300-second TTL). Subsequent bot probing or invalid requests hit Redis instantly and return HTTP 404 without querying PostgreSQL.
 
-### C. Asynchronous Analytics Processing Workflow
-1. `Analytics Service` runs an isolated background consumer group loop using Redis `XREADGROUP`.
-2. Consumes unacknowledged click events from `stream:click_events`.
-3. Resolves GeoIP location (`Country`, `City`) using MaxMind GeoIP lookup.
-4. Parses User-Agent header into `Browser`, `OS`, and `Device Type`.
-5. Inserts parsed record into PostgreSQL `clicks` table.
-6. Sends `XACK` to Redis Stream to confirm event processing.
-7. React frontend polls `GET /api/v1/analytics/dashboard-summary` every 3 seconds for live chart updates.
-
-### D. ⏱️ TTL (Time-To-Live) Strategy Across Architecture
-ZipUrl implements TTL at 3 distinct architectural layers:
-
-1. **Redis Cache TTL (`EX 86400`)**:
-   - Short code lookup records (`short:<code >`) in Redis expire automatically after **24 hours (86,400 seconds)**.
-   - Prevents RAM bloat and ensures inactive links are automatically evicted from Redis memory. If a link is clicked after 24h, the Redirect Engine fetches from PostgreSQL and re-warms the cache.
-
-2. **Custom Link Expiration TTL (`expires_at`)**:
-   - When users create links with custom expiration dates, `Redirect Engine` evaluates `expiresAt`.
-   - If `Date.now() >= expiresAt`, the system responds with **HTTP 410 Gone** and renders a glassmorphism `⏳ Short Link Expired` page.
-
-3. **Nginx Container DNS Resolution TTL (`valid=10s`)**:
-   - In `infrastructure/nginx/nginx.conf`, Docker container IP resolution has a **10-second TTL** (`resolver 127.0.0.11 valid=10s;`).
-   - Ensures Nginx dynamically updates microservice IP addresses during container restarts without causing 502 Bad Gateway errors.
+### 3. Origin Shielding & Cloudflare mTLS Security
+- **Cloudflare Origin CA**: Nginx uses a 15-year Origin CA certificate (`origin-cert.pem`) in Cloudflare **Full (Strict)** SSL mode over HTTPS Port 443.
+- **AWS Security Group Inbound CIDR Whitelisting**: Port 443 and Port 80 access on EC2 is locked down strictly to Cloudflare's published IPv4 CIDR ranges, preventing direct IP bypass attacks.
 
 ---
 
-## 💡 5. Top 10 Technical Interview Questions & Answers
+## 💬 5. Technical Questions & Answers for Interviews
 
-### Q1: Why did you choose Microservices over a Monolith?
-> **Answer**: *"A URL shortener has asymmetric traffic patterns: redirection requests outnumber URL creation requests by 100:1. Separating the **Redirect Engine** into an isolated microservice allows us to scale it horizontally independently of the Auth or Analytics services, ensuring zero performance impact on redirections during heavy analytics read/write workloads."*
+### Q1: Why did you separate URL Shortening and Redirection into two microservices?
+> **Answer**: *"Shortening and Redirection have vastly different throughput requirements. Redirection accounts for **95%+ of incoming traffic** and demands sub-15ms latency. By isolating `redirect-service` from `url-service`, redirection can scale independently without being impacted by CPU-heavy password hashing or database write queries."*
 
----
+### Q2: How do you handle collision arbitration without distributed locks?
+> **Answer**: *"We rely on PostgreSQL unique constraints and partial indexes (`CREATE UNIQUE INDEX ... WHERE custom_alias IS NOT NULL`) as the sole collision arbiter. If a collision occurs during creation, PostgreSQL raises a unique constraint violation (HTTP 409), eliminating the need for distributed locks."*
 
-### Q2: How do you handle short code collisions?
-> **Answer**: *"Instead of random string generation which degrades performance due to database collision checks (`SELECT EXISTS`), I used a **Base62 Encoding Scheme** mapped to PostgreSQL's sequential auto-incrementing primary keys. Because every auto-incrementing integer is mathematically unique, Base62 encoding guarantees 100% collision-free short codes without requiring database collision checks."*
+### Q3: How do you prevent bot scanners from exhausting database connection pools?
+> **Answer**: *"I implemented **sentinel negative caching** in Redis. When an invalid or non-existent short code is requested, `redirect-service` writes a 5-minute TTL key (`short:invalid:<code> = 1`). Repeated bot requests hit Redis instantly and exit with HTTP 404, completely shielding PostgreSQL."*
 
----
-
-### Q3: How do you achieve sub-15ms redirection latency?
-> **Answer**: *"Three factors:*
-> 1. *In-Memory Caching: Short codes are pre-warmed in Redis upon creation (`short:<code >`).*
-> 2. *Asynchronous Event Streaming: Click logging is decoupled from the HTTP response loop using Redis Streams (`XADD`). The redirect engine responds immediately with an HTTP 302 location header without blocking on PostgreSQL writes.*
-> 3. *Edge CDN Proxying: Cloudflare handles SSL termination and keeps TCP connections alive."*
+### Q4: How is security handled between Cloudflare and your EC2 origin?
+> **Answer**: *"I configured **Cloudflare Full (Strict) SSL Mode** using a 15-year Cloudflare Origin CA certificate installed on Nginx on HTTPS Port 443. Additionally, I locked down AWS EC2 Security Group inbound rules strictly to Cloudflare's IPv4 CIDR ranges, creating an **Origin Shield** that blocks any direct IP bypass attempts."*
 
 ---
 
-### Q4: Why did you use Redis Streams instead of RabbitMQ or Kafka?
-> **Answer**: *"Since Redis was already in our stack for short-code caching, using **Redis Streams** gave us built-in consumer groups (`XGROUP`), message persistence, and acknowledge semantics (`XACK`) with zero additional infrastructure overhead or memory cost compared to managing a separate Kafka or RabbitMQ cluster."*
-
----
-
-### Q5: How did you handle Nginx 502 Bad Gateway errors during container restarts?
-> **Answer**: *"By default, Nginx resolves upstream hostnames once at startup and caches the resolved IP address. When Docker Compose recreated microservice containers, internal IP addresses changed, causing Nginx to proxy traffic to stale IPs.*
-> 
-> *I fixed this by configuring Docker's embedded DNS resolver (`resolver 127.0.0.11 valid=10s;`) and using dynamic variable upstreams (`set $redirect_upstream http://redirect-service:5003; proxy_pass $redirect_upstream;`), forcing Nginx to dynamically re-resolve container IPs every 10 seconds."*
-
----
-
-### Q6: How do you capture accurate visitor IPs behind Cloudflare and Nginx?
-> **Answer**: *"Multi-layer reverse proxies rewrite request socket IPs. To capture the true visitor IP for GeoIP lookups:*
-> 1. *Configured Nginx to pass Cloudflare's `CF-Connecting-IP` header (`proxy_set_header CF-Connecting-IP $http_cf_connecting_ip;`).*
-> 2. *Updated microservices to parse `CF-Connecting-IP` first, falling back to the first IP in `X-Forwarded-For` comma chains (`rawIp.split(',')[0].trim()`)."*
-
----
-
-### Q7: How do you handle database migrations in a containerized environment?
-> **Answer**: *"I built a dedicated migration container (`migration`) in Docker Compose that runs before microservices start. It maintains a `schema_migrations` tracking table in PostgreSQL, executes new SQL files sequentially inside atomic transactions (`BEGIN ... COMMIT`), and exits cleanly (`condition: service_completed_successfully`)."*
-
----
-
-### Q8: How is authentication and security handled?
-> **Answer**: *"The system supports dual-authentication:*
-> 1. *JWT Tokens: Issued upon login for session authentication in the web dashboard.*
-> 2. *API Keys (`sk_live_*`): Provided for programmatic developer access via Bearer headers.*
-> 
-> *Passwords are hashed using BCrypt (`10 rounds`). API Gateway applies global IP rate-limiting (`100 reqs/15 mins`) to protect against brute-force and DDoS attacks."*
-
----
-
-### Q9: How is frontend deployment separated from backend microservices?
-> **Answer**: *"The React 19 single-page application is built with Vite and deployed directly to **Cloudflare Pages** for global CDN edge distribution. The frontend communicates with backend microservices via REST APIs hosted on AWS EC2 (`api.zipurl.dpdns.org`) using CORS credentials and dynamic environment fallback handling."*
-
----
-
-### Q10: How would you scale this system to 1 Billion links?
-> **Answer**:
-> 1. **Database Sharding**: Partition PostgreSQL `urls` and `clicks` tables by hash of `user_id` or `short_code`.
-> 2. **Redis Cluster**: Deploy a Redis Cluster with LRU eviction policy to cache the top 20% most active short links.
-> 3. **Multiple Worker Processes**: Scale `analytics-service` consumer instances using Redis Stream Consumer Groups to parallelize click ingestion.
-> 4. **AWS Auto-Scaling**: Deploy Nginx and Redirect Engine instances across multiple Availability Zones behind an AWS Application Load Balancer.
-
----
-
-### Q11: How did you secure origin access and SSL/TLS certificates on AWS EC2?
-> **Answer**: *"I implemented a multi-layered Origin Shield and SSL/TLS security architecture:*
-> 1. **AWS Security Group Inbound CIDR Whitelisting**: Restricted AWS EC2 Inbound Rules to whitelist **strictly official Cloudflare IPv4 CIDR ranges** (`173.245.48.0/20`, `104.16.0.0/13`, `172.64.0.0/13`, etc.) for Port 443 HTTPS. This ensures no attacker can bypass Cloudflare DDoS protection or WAF by scanning or accessing the EC2 IP directly.
-> 2. **Cloudflare Origin CA Certificates**: Installed 15-year Cloudflare Origin CA certificates (`origin-cert.pem` & `origin-key.pem`) in Nginx and enabled **Cloudflare Full (Strict) SSL Mode**, establishing end-to-end encrypted TLS 1.2/1.3 handshakes between Cloudflare Edge and EC2.
-> 3. **Forced HTTPS Redirection**: Nginx immediately redirects any unencrypted Port 80 HTTP request (`return 301 https://$host$request_uri;`) to Port 443."*
-
----
-
-## 🎯 6. Cheat Sheet for Interview Day
-
-| Topic | Key Terminology to Use |
-| :--- | :--- |
-| **Architecture** | Event-Driven Microservices, Reverse Proxy, Asynchronous Streaming |
-| **Encoding** | Base62 Algorithm, Collision-Free Sequential ID Mapping |
-| **Performance** | In-Memory Redis Cache, Sub-15ms Latency, Fire-and-Forget Logging |
-| **Reliability** | Docker Embedded DNS Resolver, Consumer Groups (`XREADGROUP`), Atomic DB Migrations |
-| **Security** | Cloudflare DDoS Protection, CORS Credentials, BCrypt Hashing, Rate Limiting |
-| **DevOps** | Docker Compose Orchestration, AWS EC2 Elastic IP, Cloudflare Pages CDN |
-
----
-*Prepared for Revanth • Master System Architecture & Interview Pitch Guide*
+*Prepared for Revanth • Master 2-Microservice System Architecture & Interview Pitch Guide*

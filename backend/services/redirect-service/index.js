@@ -13,30 +13,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health Check
 app.get('/health', (req, res) => {
-  res.json({ service: 'Redirect Service', status: 'UP', timestamp: new Date() });
+  res.json({ service: 'Redirect Service (High Throughput Engine)', status: 'UP', timestamp: new Date() });
 });
-
-// Helper to push async click event to Redis Stream
-async function logClickAsync(req, urlId) {
-  try {
-    const rawIp = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
-    const ip = rawIp.split(',')[0].trim();
-    const userAgent = req.headers['user-agent'] || 'Unknown';
-    const referrer = req.headers['referer'] || req.headers['referrer'] || 'Direct';
-
-    await redis.xadd(
-      config.CLICK_STREAM_KEY,
-      '*',
-      'urlId', String(urlId),
-      'ip', String(ip),
-      'userAgent', String(userAgent),
-      'referrer', String(referrer),
-      'timestamp', String(Date.now())
-    );
-  } catch (err) {
-    console.error('[Redirect Service] Failed to queue async click log:', err.message);
-  }
-}
 
 // Helper to check if expiration date has passed
 function isExpired(expiresAt) {
@@ -46,20 +24,31 @@ function isExpired(expiresAt) {
   return expDate.getTime() <= Date.now();
 }
 
-// Perform URL Lookup from Cache or DB
+// Perform URL Lookup from Redis Cache-Aside with Sentinel Negative Caching (5-min TTL)
 async function getUrlRecord(shortCode) {
+  // 1. Sentinel Negative Cache check to absorb bot probes
+  const isInvalid = await redis.get(`short:invalid:${shortCode}`);
+  if (isInvalid) {
+    return null;
+  }
+
+  // 2. Cache-Aside lookup
   const cached = await redis.get(`short:${shortCode}`);
   if (cached) {
     return JSON.parse(cached);
   }
 
-  // Fallback to PostgreSQL
+  // 3. PostgreSQL Fallback
   const result = await db.query(
-    'SELECT id, original_url, password_hash, expires_at, is_active FROM urls WHERE short_code = $1',
+    'SELECT id, original_url, password_hash, expires_at, is_active FROM urls WHERE short_code = $1 OR custom_alias = $1',
     [shortCode]
   );
 
-  if (result.rows.length === 0) return null;
+  if (result.rows.length === 0) {
+    // Set 5-minute Sentinel Negative Cache to absorb repeated bot probing
+    await redis.set(`short:invalid:${shortCode}`, '1', 'EX', 300);
+    return null;
+  }
 
   const row = result.rows[0];
   const cacheData = {
@@ -76,7 +65,7 @@ async function getUrlRecord(shortCode) {
   return cacheData;
 }
 
-// HTML Generator for Password Protection Screen
+// Glassmorphism HTML Generator for Password Protection Screen
 function renderPasswordPage(code, error = null) {
   return `
     <!DOCTYPE html>
@@ -144,7 +133,6 @@ function renderPasswordPage(code, error = null) {
             font-size: 1rem;
             margin-bottom: 20px;
             outline: none;
-            transition: all 0.2s;
           }
           input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); }
           button {
@@ -157,7 +145,6 @@ function renderPasswordPage(code, error = null) {
             font-weight: 600;
             border-radius: 10px;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
           }
           button:hover { transform: translateY(-2px); box-shadow: 0 0 25px rgba(99, 102, 241, 0.4); }
         </style>
@@ -166,10 +153,10 @@ function renderPasswordPage(code, error = null) {
         <div class="card">
           <div class="icon">🔒</div>
           <h2>Password Protected Link</h2>
-          <p>This link is encrypted. Enter the password set by the owner to unlock access.</p>
+          <p>This link is encrypted. Enter the password set by the creator to unlock access.</p>
           ${error ? `<div class="error">${error}</div>` : ''}
           <form method="POST" action="/${code}">
-            <input type="password" name="password" placeholder="Enter link password..." required autofocus />
+            <input type="password" name="password" placeholder="Enter link password..." required autoFocus />
             <button type="submit">Unlock & Access Link ➔</button>
           </form>
         </div>
@@ -178,7 +165,7 @@ function renderPasswordPage(code, error = null) {
   `;
 }
 
-// HTML Generator for Expired Screen
+// HTML Generator for Expired Link Screen
 function renderExpiredPage() {
   return `
     <!DOCTYPE html>
@@ -208,7 +195,6 @@ function renderExpiredPage() {
             width: 100%;
             max-width: 420px;
             text-align: center;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
           }
           .icon { font-size: 40px; margin-bottom: 16px; }
           h2 { font-size: 1.5rem; font-weight: 700; color: #fca5a5; margin-bottom: 8px; }
@@ -226,7 +212,7 @@ function renderExpiredPage() {
   `;
 }
 
-// Redirect Endpoint (GET)
+// Redirect Endpoint (GET /:code)
 app.get('/:code', async (req, res) => {
   try {
     const { code } = req.params;
@@ -258,20 +244,15 @@ app.get('/:code', async (req, res) => {
       `);
     }
 
-    // Check if link expiration date has passed
     if (isExpired(record.expiresAt)) {
       return res.status(410).send(renderExpiredPage());
     }
 
-    // Check if Password Protected -> Render Glassmorphism Password Screen
     if (record.hasPassword) {
       return res.send(renderPasswordPage(code));
     }
 
-    // Fire & Forget Async Click Event
-    logClickAsync(req, record.id);
-
-    // High-speed HTTP 302 Redirect
+    // Ultra-Fast Sub-15ms HTTP 302 Redirect
     return res.redirect(302, record.originalUrl);
   } catch (err) {
     console.error('[Redirect Service Error]', err);
@@ -279,7 +260,7 @@ app.get('/:code', async (req, res) => {
   }
 });
 
-// Password Submission Endpoint (POST /:code)
+// Password Verification Endpoint (POST /:code)
 app.post('/:code', async (req, res) => {
   try {
     const { code } = req.params;
@@ -299,13 +280,9 @@ app.post('/:code', async (req, res) => {
       return res.status(401).send(renderPasswordPage(code, 'Incorrect password. Please try again.'));
     }
 
-    // Log Click Async
-    logClickAsync(req, record.id);
-
-    // Redirect to original URL on successful password verification
     return res.redirect(302, record.originalUrl);
   } catch (err) {
-    console.error('[Redirect Service Password Verification Error]', err);
+    console.error('[Redirect Service Password Error]', err);
     res.status(500).send('Internal Server Error');
   }
 });

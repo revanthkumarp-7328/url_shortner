@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const config = require('../../shared/config');
 const db = require('../../shared/database/db');
 const redis = require('../../shared/database/redis');
@@ -12,46 +11,13 @@ app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 
-// Helper middleware to authenticate via JWT or API Key (sk_live_*)
-async function authenticateUser(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Authentication token or API key required' });
-  }
-
-  const token = authHeader.split(' ')[1];
-
-  // 1. Authenticate via API Key (sk_live_...)
-  if (token.startsWith('sk_live_')) {
-    try {
-      const result = await db.query('SELECT id, email FROM users WHERE api_key = $1', [token]);
-      if (result.rows.length === 0) {
-        return res.status(401).json({ error: 'Invalid API Key' });
-      }
-      req.user = { userId: result.rows[0].id, email: result.rows[0].email };
-      return next();
-    } catch (err) {
-      return res.status(500).json({ error: 'Failed to authenticate API Key' });
-    }
-  }
-
-  // 2. Authenticate via JWT Token
-  try {
-    const decoded = jwt.verify(token, config.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (err) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
-}
-
 // Health Check
 app.get('/health', (req, res) => {
-  res.json({ service: 'URL Service', status: 'UP', timestamp: new Date() });
+  res.json({ service: 'URL Service (Shortening Engine)', status: 'UP', timestamp: new Date() });
 });
 
-// Create Short URL
-app.post('/', authenticateUser, async (req, res) => {
+// Create Short URL Endpoint (Public Standalone Microservice)
+app.post('/', async (req, res) => {
   try {
     const { originalUrl, customAlias, password, expiresAt } = req.body;
 
@@ -69,13 +35,13 @@ app.post('/', authenticateUser, async (req, res) => {
     let shortCode = (customAlias && customAlias.trim() !== '') ? customAlias.trim() : null;
 
     if (shortCode) {
-      // Check custom alias availability
-      const existing = await db.query('SELECT id FROM urls WHERE short_code = $1', [shortCode]);
+      // Unique constraint as sole collision arbiter
+      const existing = await db.query('SELECT id FROM urls WHERE short_code = $1 OR custom_alias = $1', [shortCode]);
       if (existing.rows.length > 0) {
         return res.status(409).json({ error: 'Custom alias is already taken' });
       }
     } else {
-      // Generate collision-safe random code
+      // Generate collision-safe Base62 code
       let attempts = 0;
       while (!shortCode && attempts < 5) {
         const candidate = generateRandomCode(6);
@@ -93,22 +59,21 @@ app.post('/', authenticateUser, async (req, res) => {
 
     const passwordHash = (password && password.trim() !== '') ? await bcrypt.hash(password, 10) : null;
     
-    // Validate expiresAt date (Optional)
     let expiryDate = null;
     if (expiresAt && expiresAt.trim() !== '' && !isNaN(new Date(expiresAt).getTime())) {
       expiryDate = new Date(expiresAt);
     }
 
     const result = await db.query(
-      `INSERT INTO urls (user_id, original_url, short_code, custom_alias, password_hash, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO urls (original_url, short_code, custom_alias, password_hash, expires_at)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING id, original_url, short_code, custom_alias, expires_at, is_active, created_at`,
-      [req.user.userId, originalUrl, shortCode, customAlias || null, passwordHash, expiryDate]
+      [originalUrl, shortCode, customAlias || null, passwordHash, expiryDate]
     );
 
     const urlRecord = result.rows[0];
 
-    // Pre-populate Redis Cache for instant redirection
+    // Pre-populate Redis Cache-Aside for sub-15ms redirection path
     const cacheData = {
       id: urlRecord.id,
       originalUrl: urlRecord.original_url,
@@ -138,18 +103,14 @@ app.post('/', authenticateUser, async (req, res) => {
   }
 });
 
-// List User Short URLs
-app.get('/my-urls', authenticateUser, async (req, res) => {
+// List All Active Short URLs
+app.get('/all', async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT u.id, u.original_url, u.short_code, u.custom_alias, u.password_hash, u.expires_at, u.is_active, u.created_at,
-              COUNT(c.id)::int as click_count
-       FROM urls u
-       LEFT JOIN clicks c ON u.id = c.url_id
-       WHERE u.user_id = $1
-       GROUP BY u.id
-       ORDER BY u.created_at DESC`,
-      [req.user.userId]
+      `SELECT id, original_url, short_code, custom_alias, password_hash, expires_at, is_active, created_at
+       FROM urls
+       ORDER BY created_at DESC
+       LIMIT 100`
     );
 
     const urls = result.rows.map((row) => ({
@@ -160,33 +121,31 @@ app.get('/my-urls', authenticateUser, async (req, res) => {
       hasPassword: !!row.password_hash,
       expiresAt: row.expires_at,
       isActive: row.is_active,
-      clicks: row.click_count,
       createdAt: row.created_at,
     }));
 
     res.json({ urls });
   } catch (err) {
     console.error('[URL Service List Error]', err);
-    res.status(500).json({ error: 'Failed to fetch user URLs' });
+    res.status(500).json({ error: 'Failed to fetch URLs' });
   }
 });
 
 // Toggle URL Active Status
-app.patch('/:id/toggle-active', authenticateUser, async (req, res) => {
+app.patch('/:id/toggle-active', async (req, res) => {
   try {
     const urlId = req.params.id;
     const result = await db.query(
-      'UPDATE urls SET is_active = NOT is_active WHERE id = $1 AND user_id = $2 RETURNING short_code, is_active, original_url, password_hash, expires_at',
-      [urlId, req.user.userId]
+      'UPDATE urls SET is_active = NOT is_active WHERE id = $1 RETURNING short_code, is_active, original_url, password_hash, expires_at',
+      [urlId]
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'URL not found or unauthorized' });
+      return res.status(404).json({ error: 'URL not found' });
     }
 
     const row = result.rows[0];
 
-    // Invalidate/Update Redis cache
     const cacheData = {
       id: urlId,
       originalUrl: row.original_url,
@@ -205,16 +164,13 @@ app.patch('/:id/toggle-active', authenticateUser, async (req, res) => {
 });
 
 // Delete Short URL
-app.delete('/:id', authenticateUser, async (req, res) => {
+app.delete('/:id', async (req, res) => {
   try {
     const urlId = req.params.id;
-    const result = await db.query('DELETE FROM urls WHERE id = $1 AND user_id = $2 RETURNING short_code', [
-      urlId,
-      req.user.userId,
-    ]);
+    const result = await db.query('DELETE FROM urls WHERE id = $1 RETURNING short_code', [urlId]);
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'URL not found or unauthorized' });
+      return res.status(404).json({ error: 'URL not found' });
     }
 
     const shortCode = result.rows[0].short_code;
@@ -228,5 +184,5 @@ app.delete('/:id', authenticateUser, async (req, res) => {
 
 const PORT = config.PORT.URL;
 app.listen(PORT, () => {
-  console.log(`[URL Microservice] Running on port ${PORT}`);
+  console.log(`[URL Microservice] Shortening Engine running on port ${PORT}`);
 });
