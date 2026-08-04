@@ -17,9 +17,14 @@ const getBaseUrl = () => {
     if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
       return `http://${hostname}:5002`;
     }
+
+    // Same-origin production domain access (eliminates cross-domain CORS)
+    if (hostname === 'zipurl.dpdns.org') {
+      return window.location.origin;
+    }
   }
   
-  // Production Domain API endpoint
+  // Production Domain API endpoint fallback
   return 'https://api.zipurl.dpdns.org';
 };
 
