@@ -30,7 +30,14 @@ export default function UrlShortenerWidget({ onUrlCreated }) {
         expiresAt: expiresAt || undefined,
       });
 
-      setCreatedUrl(response.data.url);
+      const newUrl = response.data.url;
+      setCreatedUrl(newUrl);
+
+      // Save created link locally to user's browser localStorage
+      const existingLocal = JSON.parse(localStorage.getItem('zipurl_my_links') || '[]');
+      const updatedLocal = [newUrl, ...existingLocal.filter(item => item.id !== newUrl.id)];
+      localStorage.setItem('zipurl_my_links', JSON.stringify(updatedLocal));
+
       setOriginalUrl('');
       setCustomAlias('');
       setPassword('');
@@ -62,7 +69,7 @@ export default function UrlShortenerWidget({ onUrlCreated }) {
           <Zap size={12} /> 2 Standalone Microservices
         </div>
         <div style={{ background: 'rgba(236, 72, 153, 0.1)', border: '1px solid rgba(236, 72, 153, 0.25)', color: '#ec4899', padding: '4px 10px', borderRadius: '30px', fontSize: '0.72rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <Shield size={12} /> Sentinel Negative Caching
+          <Shield size={12} /> Privacy First Local Storage
         </div>
       </div>
 

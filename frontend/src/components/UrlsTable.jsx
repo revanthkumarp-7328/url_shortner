@@ -1,33 +1,25 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ExternalLink, Copy, Check, Lock, Power, Trash2, RefreshCw } from 'lucide-react';
 import { urlAPI } from '../services/api';
 
 export default function UrlsTable({ refreshTrigger, onUrlDeleted }) {
   const [urls, setUrls] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState(null);
-  const isFirstLoad = useRef(true);
 
   useEffect(() => {
-    fetchUrls(isFirstLoad.current);
-
-    const interval = setInterval(() => {
-      fetchUrls(false);
-    }, 5000);
-
-    return () => clearInterval(interval);
+    loadLocalUrls();
   }, [refreshTrigger]);
 
-  const fetchUrls = async (showLoading = isFirstLoad.current) => {
+  const loadLocalUrls = () => {
     try {
-      if (showLoading) setLoading(true);
-      const res = await urlAPI.getAllUrls();
-      setUrls(res.data.urls);
-      isFirstLoad.current = false;
+      const stored = localStorage.getItem('zipurl_my_links');
+      if (stored) {
+        setUrls(JSON.parse(stored));
+      } else {
+        setUrls([]);
+      }
     } catch (err) {
-      console.error('Failed to fetch URLs:', err);
-    } finally {
-      if (showLoading) setLoading(false);
+      console.error('Failed to load local URLs:', err);
     }
   };
 
@@ -39,8 +31,14 @@ export default function UrlsTable({ refreshTrigger, onUrlDeleted }) {
 
   const handleToggleActive = async (id) => {
     try {
-      await urlAPI.toggleActive(id);
-      fetchUrls(false);
+      // Call API backend to toggle state
+      const res = await urlAPI.toggleActive(id);
+      const newActive = res.data.isActive;
+
+      // Update local storage state
+      const updated = urls.map((u) => (u.id === id ? { ...u, isActive: newActive } : u));
+      setUrls(updated);
+      localStorage.setItem('zipurl_my_links', JSON.stringify(updated));
     } catch (err) {
       alert('Failed to update URL status');
     }
@@ -49,11 +47,24 @@ export default function UrlsTable({ refreshTrigger, onUrlDeleted }) {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this short URL?')) return;
     try {
+      // Call API backend to delete
       await urlAPI.deleteUrl(id);
-      fetchUrls(false);
+
+      // Remove from local storage
+      const updated = urls.filter((u) => u.id !== id);
+      setUrls(updated);
+      localStorage.setItem('zipurl_my_links', JSON.stringify(updated));
+
       if (onUrlDeleted) onUrlDeleted();
     } catch (err) {
       alert('Failed to delete URL');
+    }
+  };
+
+  const handleClearHistory = () => {
+    if (window.confirm('Clear all your local short link history from this browser?')) {
+      localStorage.removeItem('zipurl_my_links');
+      setUrls([]);
     }
   };
 
@@ -63,25 +74,23 @@ export default function UrlsTable({ refreshTrigger, onUrlDeleted }) {
         <div className="analytics-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '12px' }}>
           <div>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>
-              Recent Short Links Engine Registry
+              Your Created Links Registry (Local Privacy)
             </h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginTop: '2px' }}>
-              Live short codes, custom aliases, expiration dates, and security status
+              Stored locally on your device. Only you can see and manage links created from this browser.
             </p>
           </div>
 
-          <button className="btn-glass" onClick={() => fetchUrls(true)} style={{ padding: '6px 12px', fontSize: '0.78rem' }}>
-            <RefreshCw size={13} /> Refresh
-          </button>
+          {urls.length > 0 && (
+            <button className="btn-glass" onClick={handleClearHistory} style={{ padding: '6px 12px', fontSize: '0.78rem', color: '#fca5a5' }}>
+              Clear Local History
+            </button>
+          )}
         </div>
 
-        {loading && !urls.length ? (
+        {urls.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '28px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-            Fetching short links...
-          </div>
-        ) : urls.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '28px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-            No short URLs created yet. Use the widget above to generate your first link!
+            No short URLs created yet on this device. Use the widget above to generate your first link!
           </div>
         ) : (
           <div className="table-responsive-wrapper">
