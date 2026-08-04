@@ -12,12 +12,12 @@ app.use(cors());
 app.use(express.json());
 
 // Health Check
-app.get('/health', (req, res) => {
+app.get(['/health', '/api/v1/health'], (req, res) => {
   res.json({ service: 'URL Service (Shortening Engine)', status: 'UP', timestamp: new Date() });
 });
 
 // Create Short URL Endpoint (Public Standalone Microservice)
-app.post('/', async (req, res) => {
+app.post(['/', '/api/v1', '/api/v1/urls'], async (req, res) => {
   try {
     const { originalUrl, customAlias, password, expiresAt } = req.body;
 
@@ -104,7 +104,7 @@ app.post('/', async (req, res) => {
 });
 
 // List All Active Short URLs
-app.get('/all', async (req, res) => {
+app.get(['/all', '/api/v1/all', '/api/v1/urls/all'], async (req, res) => {
   try {
     const result = await db.query(
       `SELECT id, original_url, short_code, custom_alias, password_hash, expires_at, is_active, created_at
@@ -132,7 +132,7 @@ app.get('/all', async (req, res) => {
 });
 
 // Toggle URL Active Status
-app.patch('/:id/toggle-active', async (req, res) => {
+app.patch(['/:id/toggle-active', '/api/v1/:id/toggle-active', '/api/v1/urls/:id/toggle-active'], async (req, res) => {
   try {
     const urlId = req.params.id;
     const result = await db.query(
@@ -164,7 +164,7 @@ app.patch('/:id/toggle-active', async (req, res) => {
 });
 
 // Delete Short URL
-app.delete('/:id', async (req, res) => {
+app.delete(['/:id', '/api/v1/:id', '/api/v1/urls/:id'], async (req, res) => {
   try {
     const urlId = req.params.id;
     const result = await db.query('DELETE FROM urls WHERE id = $1 RETURNING short_code', [urlId]);
