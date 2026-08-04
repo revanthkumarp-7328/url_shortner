@@ -83,6 +83,8 @@ app.post(['/', '/api/v1', '/api/v1/urls'], async (req, res) => {
       isActive: true,
     };
 
+    // Remove any negative sentinel cache & pre-warm valid cache
+    await redis.del(`short:invalid:${shortCode}`);
     await redis.set(`short:${shortCode}`, JSON.stringify(cacheData));
 
     res.status(201).json({
@@ -155,6 +157,7 @@ app.patch(['/:id/toggle-active', '/api/v1/:id/toggle-active', '/api/v1/urls/:id/
       isActive: row.is_active,
     };
 
+    await redis.del(`short:invalid:${row.short_code}`);
     await redis.set(`short:${row.short_code}`, JSON.stringify(cacheData));
 
     res.json({ message: 'URL status updated', isActive: row.is_active });
@@ -175,6 +178,7 @@ app.delete(['/:id', '/api/v1/:id', '/api/v1/urls/:id'], async (req, res) => {
 
     const shortCode = result.rows[0].short_code;
     await redis.del(`short:${shortCode}`);
+    await redis.del(`short:invalid:${shortCode}`);
 
     res.json({ message: 'URL deleted successfully' });
   } catch (err) {
