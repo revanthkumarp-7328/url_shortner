@@ -8,6 +8,8 @@ services:
     command: npm run start:url
     env_file:
       - ./backend/.env
+    ports:
+      - "127.0.0.1:5002:5002"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -20,21 +22,7 @@ services:
     command: npm run start:redirect
     env_file:
       - ./backend/.env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  nginx:
-    image: nginx:alpine
-    container_name: shortener_nginx_prod
-    restart: always
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./infrastructure/nginx/certs:/etc/nginx/certs:ro
-    depends_on:
-      - url-service
-      - redirect-service
+      - "127.0.0.1:5003:5003"
     extra_hosts:
       - "host.docker.internal:host-gateway"

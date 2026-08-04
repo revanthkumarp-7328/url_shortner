@@ -1,12 +1,12 @@
 # 🚀 ZipUrl — High-Throughput Microservices URL Shortener
 
-An enterprise-grade, high-performance URL shortener built with **React**, **Node.js/Express 2-Microservice Architecture**, **Host-Native PostgreSQL 16**, **Redis 7**, **Nginx**, **AWS EC2**, and **Cloudflare Pages**.
+An enterprise-grade, high-performance URL shortener built with **React**, **Node.js/Express 2-Microservice Architecture**, **Host-Native PostgreSQL 16**, **Redis 7**, **Host-Native Nginx**, **AWS EC2**, and **Cloudflare Pages**.
 
 Designed for ultra-low latency redirection (`< 15ms`), cost-optimized deployment on **Cloudflare Pages** (Frontend - $0/mo) and **AWS EC2** (Backend).
 
 ---
 
-## 🏗️ 2-Microservice Architecture Overview
+## 🏗️ Architecture Overview
 
 ```
                       [ Client Browser ]
@@ -18,15 +18,15 @@ Designed for ultra-low latency redirection (`< 15ms`), cost-optimized deployment
                │                             │
                └──────────────┬──────────────┘
                               ▼
-                   [ Nginx Reverse Proxy ]
+                 [ Native Nginx on EC2 Host ]
                               │
                ┌──────────────┴──────────────┐
                ▼                             ▼
    [ url-service:5002 ]            [ redirect-service:5003 ]
-   (Shortening Engine)             (Redirection Engine)
+   (Shortening Container)          (Redirection Container)
                │                             │
                └──────────────┬──────────────┘
-                              │ (host.docker.internal)
+                              │
                               ▼
                   [ AWS EC2 Host System ]
                   • PostgreSQL 16 DB (Partial Indexes & BIGSERIAL)
@@ -57,9 +57,9 @@ url_shortner/
 │   └── package.json
 │
 ├── infrastructure/
-│   └── nginx/                    # Nginx SSL & Microservice Reverse Proxy
+│   └── nginx/                    # Nginx SSL & Microservice Reverse Proxy Config
 │
-├── docker-compose.prod.yml       # Production Compose (url-service, redirect-service, nginx)
+├── docker-compose.prod.yml       # Production Compose (url-service, redirect-service)
 └── docker-compose.yml            # Development Compose
 ```
 
@@ -67,8 +67,8 @@ url_shortner/
 
 ## ⚡ Core Engineering Highlights
 
-- **2 Decoupled Microservices**: `url-service` (shortening engine) and `redirect-service` (redirection engine) operate independently for maximum throughput.
-- **Host-Native Postgres & Redis**: Microservices run in Docker containers connected directly to host-native PostgreSQL 16 and Redis 7 on EC2 (`host.docker.internal`).
+- **2 Decoupled Microservices**: `url-service` (shortening container) and `redirect-service` (redirection container) exposed to `127.0.0.1`.
+- **Host-Native Nginx, Postgres & Redis**: Native Nginx reverse proxies traffic on Ports 80 & 443 to Docker microservices, backed by host-native PostgreSQL 16 and Redis 7.
 - **Sentinel Negative Caching**: Invalid code lookups are cached in Redis with a 5-minute TTL (`short:invalid:<code>`) to absorb bot probes without touching PostgreSQL.
 - **Collision-Free Storage**: Utilizes `BIGSERIAL` primary keys and partial unique indexes (`CREATE UNIQUE INDEX idx_urls_custom_alias ON urls(custom_alias) WHERE custom_alias IS NOT NULL;`).
 - **Enterprise SSL & Origin Lockdown**: Nginx uses **15-year Cloudflare Origin CA certificates** in **Full (Strict) SSL Mode** over HTTPS Port 443, locked strictly to Cloudflare IPv4 CIDR ranges.
