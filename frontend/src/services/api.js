@@ -1,11 +1,29 @@
 import axios from 'axios';
 
-const isLocal = typeof window !== 'undefined' && 
-  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+const getBaseUrl = () => {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    
+    // Local dev server
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:5002';
+    }
+    
+    // Direct EC2 IP address access
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
+      return `http://${hostname}:5002`;
+    }
+  }
+  
+  // Production Domain API endpoint
+  return 'https://api.zipurl.dpdns.org';
+};
 
-const API_BASE_URL = isLocal 
-  ? 'http://localhost:5002' 
-  : 'https://api.zipurl.dpdns.org';
+const API_BASE_URL = getBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
