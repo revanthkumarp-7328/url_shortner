@@ -12,7 +12,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Health Check
-app.get('/health', (req, res) => {
+app.get(['/health', '/api/v1/health'], (req, res) => {
   res.json({ service: 'Redirect Service (High Throughput Engine)', status: 'UP', timestamp: new Date() });
 });
 
@@ -26,6 +26,8 @@ function isExpired(expiresAt) {
 
 // Perform URL Lookup from Redis Cache-Aside with Sentinel Negative Caching (5-min TTL)
 async function getUrlRecord(shortCode) {
+  if (!shortCode) return null;
+
   // 1. Sentinel Negative Cache check to absorb bot probes
   const isInvalid = await redis.get(`short:invalid:${shortCode}`);
   if (isInvalid) {
@@ -38,9 +40,9 @@ async function getUrlRecord(shortCode) {
     return JSON.parse(cached);
   }
 
-  // 3. PostgreSQL Fallback
+  // 3. PostgreSQL Fallback (Case-insensitive match for maximum resilience)
   const result = await db.query(
-    'SELECT id, original_url, password_hash, expires_at, is_active FROM urls WHERE short_code = $1 OR custom_alias = $1',
+    'SELECT id, original_url, password_hash, expires_at, is_active FROM urls WHERE short_code = $1 OR custom_alias = $1 OR LOWER(short_code) = LOWER($1) OR LOWER(custom_alias) = LOWER($1)',
     [shortCode]
   );
 
@@ -216,6 +218,8 @@ function renderExpiredPage() {
 app.get('/:code', async (req, res) => {
   try {
     const { code } = req.params;
+    console.log(`[Redirect Request] Incoming code lookup: ${code}`);
+
     const record = await getUrlRecord(code);
 
     if (!record) {
@@ -253,6 +257,7 @@ app.get('/:code', async (req, res) => {
     }
 
     // Ultra-Fast Sub-15ms HTTP 302 Redirect
+    console.log(`[Redirect Success] Redirecting code ${code} -> ${record.originalUrl}`);
     return res.redirect(302, record.originalUrl);
   } catch (err) {
     console.error('[Redirect Service Error]', err);
