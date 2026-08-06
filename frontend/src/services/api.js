@@ -40,6 +40,7 @@ const api = axios.create({
 export const urlAPI = {
   create: (data) => api.post('/', data),
   getAllUrls: () => api.get('/all'),
+  updateUrl: (id, data) => api.put(`/${id}`, data),
   toggleActive: (id) => api.patch(`/${id}/toggle-active`),
   deleteUrl: (id) => api.delete(`/${id}`),
 };

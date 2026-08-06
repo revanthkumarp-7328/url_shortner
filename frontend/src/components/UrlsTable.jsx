@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ExternalLink, Copy, Check, Lock, Power, Trash2, RefreshCw } from 'lucide-react';
+import { ExternalLink, Copy, Check, Lock, Power, Trash2, Edit2 } from 'lucide-react';
 import { urlAPI } from '../services/api';
 
 export default function UrlsTable({ refreshTrigger, onUrlDeleted }) {
@@ -27,6 +27,29 @@ export default function UrlsTable({ refreshTrigger, onUrlDeleted }) {
     navigator.clipboard.writeText(shortUrl);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleEditUrl = async (row) => {
+    const newUrl = window.prompt('Enter new destination original URL:', row.originalUrl);
+    if (!newUrl || newUrl.trim() === '' || newUrl.trim() === row.originalUrl) return;
+
+    try {
+      new URL(newUrl);
+    } catch (_) {
+      alert('Invalid URL format. Please include http:// or https://');
+      return;
+    }
+
+    try {
+      const res = await urlAPI.updateUrl(row.id, { originalUrl: newUrl.trim() });
+      const updatedRecord = res.data.url;
+
+      const updated = urls.map((u) => (u.id === row.id ? { ...u, originalUrl: updatedRecord.originalUrl } : u));
+      setUrls(updated);
+      localStorage.setItem('zipurl_my_links', JSON.stringify(updated));
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to update URL');
+    }
   };
 
   const handleToggleActive = async (id) => {
@@ -148,6 +171,10 @@ export default function UrlsTable({ refreshTrigger, onUrlDeleted }) {
                         <button className="btn-glow" onClick={() => handleCopy(row.shortUrl, row.id)} style={{ padding: '5px 10px', fontSize: '0.78rem' }}>
                           {copiedId === row.id ? <Check size={12} /> : <Copy size={12} />}
                           {copiedId === row.id ? 'Copied' : 'Copy'}
+                        </button>
+
+                        <button className="btn-glass" onClick={() => handleEditUrl(row)} title="Edit Destination URL" style={{ padding: '5px 8px', fontSize: '0.78rem', color: '#38bdf8' }}>
+                          <Edit2 size={12} />
                         </button>
 
                         <button className="btn-glass" onClick={() => handleToggleActive(row.id)} style={{ padding: '5px 8px', fontSize: '0.78rem', color: row.isActive ? '#f59e0b' : '#34d399' }}>

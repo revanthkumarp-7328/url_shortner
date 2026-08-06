@@ -58,7 +58,7 @@ app.post(['/', '/api/v1', '/api/v1/urls'], async (req, res) => {
     }
 
     const passwordHash = (password && password.trim() !== '') ? await bcrypt.hash(password, 10) : null;
-    
+
     let expiryDate = null;
     if (expiresAt && expiresAt.trim() !== '' && !isNaN(new Date(expiresAt).getTime())) {
       expiryDate = new Date(expiresAt);
@@ -163,6 +163,65 @@ app.patch(['/:id/toggle-active', '/api/v1/:id/toggle-active', '/api/v1/urls/:id/
     res.json({ message: 'URL status updated', isActive: row.is_active });
   } catch (err) {
     res.status(500).json({ error: 'Failed to toggle URL status' });
+  }
+});
+
+// Update Target Original URL for Short Code
+app.put(['/:id', '/api/v1/:id', '/api/v1/urls/:id'], async (req, res) => {
+  try {
+    const urlId = req.params.id;
+    const { originalUrl } = req.body;
+
+    if (!originalUrl) {
+      return res.status(400).json({ error: 'Original URL is required' });
+    }
+
+    try {
+      new URL(originalUrl);
+    } catch (_) {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+
+    const result = await db.query(
+      `UPDATE urls SET original_url = $1 WHERE id = $2 
+       RETURNING id, original_url, short_code, custom_alias, password_hash, expires_at, is_active, created_at`,
+      [originalUrl, urlId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'URL not found' });
+    }
+
+    const row = result.rows[0];
+
+    const cacheData = {
+      id: row.id,
+      originalUrl: row.original_url,
+      hasPassword: !!row.password_hash,
+      passwordHash: row.password_hash || '',
+      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : '',
+      isActive: row.is_active,
+    };
+
+    await redis.del(`short:invalid:${row.short_code}`);
+    await redis.set(`short:${row.short_code}`, JSON.stringify(cacheData));
+
+    res.json({
+      message: 'Original URL updated successfully',
+      url: {
+        id: row.id,
+        originalUrl: row.original_url,
+        shortCode: row.short_code,
+        shortUrl: `${config.BASE_REDIRECT_URL}/${row.short_code}`,
+        hasPassword: !!row.password_hash,
+        expiresAt: row.expires_at,
+        isActive: row.is_active,
+        createdAt: row.created_at,
+      },
+    });
+  } catch (err) {
+    console.error('[URL Service Update Error]', err);
+    res.status(500).json({ error: 'Failed to update URL' });
   }
 });
 
